@@ -393,7 +393,7 @@ client = gspread.authorize(creds)
 # Replace with your Google Sheet ID
 spreadsheet_id = "1M-Vtk5L5v_qYmAXOTgbRA-HKNDeRkip_EA67H8q7uSY"
 
-worksheet = client.open_by_key(spreadsheet_id).worksheet("PSARSI BO")
+worksheet = client.open_by_key(spreadsheet_id).worksheet("halal stocks")
 
 # Clear old data
 worksheet.clear()
