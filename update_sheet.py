@@ -376,6 +376,139 @@ stocks = [
  'ZYDUSLIFE.NS'
 ]
 # ======================================
+# RSI FUNCTION
+# ======================================
+
+def calculate_rsi(close, period=14):
+
+    delta = close.diff()
+
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
+
+    rs = avg_gain / avg_loss
+
+    return 100 - (100 / (1 + rs))
+
+# ======================================
+# PARABOLIC SAR ON RSI
+# ======================================
+
+def sar_on_rsi(rsi, step=0.01, max_af=0.20):
+
+    rsi = rsi.reset_index(drop=True)
+
+    n = len(rsi)
+
+    sar = np.zeros(n)
+    trend = np.zeros(n)
+
+    sar[0] = rsi.iloc[0]
+
+    if rsi.iloc[1] >= rsi.iloc[0]:
+        trend[0] = 1
+        ep = rsi.iloc[1]
+    else:
+        trend[0] = -1
+        ep = rsi.iloc[1]
+
+    af = step
+
+    for i in range(1, n):
+
+        if trend[i-1] == 1:
+
+            sar[i] = sar[i-1] + af * (ep - sar[i-1])
+
+            if rsi.iloc[i] < sar[i]:
+                trend[i] = -1
+                sar[i] = ep
+                ep = rsi.iloc[i]
+                af = step
+            else:
+                trend[i] = 1
+                if rsi.iloc[i] > ep:
+                    ep = rsi.iloc[i]
+                    af = min(af + step, max_af)
+
+        else:
+
+            sar[i] = sar[i-1] - af * (sar[i-1] - ep)
+
+            if rsi.iloc[i] > sar[i]:
+                trend[i] = 1
+                sar[i] = ep
+                ep = rsi.iloc[i]
+                af = step
+            else:
+                trend[i] = -1
+                if rsi.iloc[i] < ep:
+                    ep = rsi.iloc[i]
+                    af = min(af + step, max_af)
+
+    return sar
+
+# ======================================
+# SCANNER
+# ======================================
+
+results = []
+
+for stock in stocks:
+
+    print(f"Scanning {stock}")
+
+    try:
+
+        df = yf.download(
+            stock,
+            period="6mo",
+            interval="1d",
+            auto_adjust=True,
+            progress=False
+        )
+
+        if len(df) < 50:
+            continue
+
+        close = df["Close"].squeeze()
+
+        df["RSI"] = calculate_rsi(close)
+        df.dropna(inplace=True)
+
+        df["SAR_RSI"] = sar_on_rsi(df["RSI"])
+
+        prev_rsi = df["RSI"].iloc[-2]
+        prev_sar = df["SAR_RSI"].iloc[-2]
+
+        curr_rsi = df["RSI"].iloc[-1]
+        curr_sar = df["SAR_RSI"].iloc[-1]
+
+        if prev_rsi < prev_sar and curr_rsi > curr_sar:
+            signal = "BUY"
+        elif prev_rsi > prev_sar and curr_rsi < curr_sar:
+            signal = "SELL"
+        else:
+            signal = ""
+
+        trend = "Bullish" if curr_rsi > curr_sar else "Bearish"
+
+        results.append({
+            "Stock": stock,
+            "Previous RSI": round(prev_rsi, 2),
+            "Previous SAR": round(prev_sar, 2),
+            "Current RSI": round(curr_rsi, 2),
+            "Current SAR": round(curr_sar, 2),
+            "Trend": trend,
+            "Signal": signal
+        })
+
+    except Exception as e:
+        print(stock, "Error:", e)
+# ======================================
 # GOOGLE SHEETS
 # ======================================
 
